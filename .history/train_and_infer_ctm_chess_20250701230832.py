@@ -92,7 +92,7 @@ def encode_board(board: chess.Board) -> torch.Tensor:
     return M
 
 # ========== 4) Настройка CTM и Optimizer ==========
-T, S = 32, 1
+T, S = 75, 1
 model = ContinuousThoughtMachine(
     iterations=T,
     d_model=512,

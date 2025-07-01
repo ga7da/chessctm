@@ -22,10 +22,10 @@ from tqdm import tqdm
 from models.ctm import ContinuousThoughtMachine
 
 # ========== 1) Гиперпараметры ==========
-BATCH_SIZE   = 16      # параллельных self-play партий
+BATCH_SIZE   =       # параллельных self-play партий
 RL_ITERS     = 5000   # число итераций RL
-SAVE_EVERY   = 2500     # чекпоинт каждые N итераций
-EVAL_EVERY   = 2500     # PGN каждые N итераций
+SAVE_EVERY   = 10     # чекпоинт каждые N итераций
+EVAL_EVERY   = 10     # PGN каждые N итераций
 LR           = 1e-4   # learning rate
 TEMPERATURE  = 1.0    # температура для стохастического выбора
 MAX_PLY      = 50     # ограничение длины партии (в полу-ходах)
@@ -92,7 +92,7 @@ def encode_board(board: chess.Board) -> torch.Tensor:
     return M
 
 # ========== 4) Настройка CTM и Optimizer ==========
-T, S = 32, 1
+T, S = 16, 1
 model = ContinuousThoughtMachine(
     iterations=T,
     d_model=512,

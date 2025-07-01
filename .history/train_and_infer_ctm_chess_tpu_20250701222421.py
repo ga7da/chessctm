@@ -28,9 +28,9 @@ from models.ctm import ContinuousThoughtMachine
 
 # ========== Hyperparameters ==========
 BATCH_SIZE   = 8      # parallel self-play games
-RL_ITERS     = 5000   # number of RL iterations
-SAVE_EVERY   = 2500     # checkpoint every N iters
-EVAL_EVERY   = 2500     # PGN every N iters
+RL_ITERS     = 2000   # number of RL iterations
+SAVE_EVERY   = 10     # checkpoint every N iters
+EVAL_EVERY   = 10     # PGN every N iters
 LR           = 1e-4   # learning rate
 TEMPERATURE  = 1.0    # sampling temperature
 MAX_PLY      = 50     # max half-moves per game

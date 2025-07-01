@@ -2,6 +2,8 @@
 # train_and_infer_ctm_chess_tpu.py
 #
 # Self-Play RL fine-tuning of CTM Chess Engine on Google Cloud TPU (4 cores).
+# Requirements:
+#   pip install torch torchvision torch_xla python-chess tqdm
 
 import os
 # Force XLA onto TPU and limit to 4 cores

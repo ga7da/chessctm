@@ -32,7 +32,7 @@ from models.ctm import ContinuousThoughtMachine
 
 # Hyperparameters
 BATCH_SIZE = 8
-RL_ITERS = 5000
+RL_ITERS =5000
 SAVE_EVERY = 2500
 EVAL_EVERY = 2500
 LR = 1e-4

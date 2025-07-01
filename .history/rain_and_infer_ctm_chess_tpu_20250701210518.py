@@ -25,12 +25,12 @@ from models.ctm import ContinuousThoughtMachine
 # Hyperparameters
 BATCH_SIZE   = 8
 RL_ITERS     = 2000
-SAVE_EVERY   = 1000
-EVAL_EVERY   = 1000
+SAVE_EVERY   = 200
+EVAL_EVERY   = 10
 LR           = 1e-4
 TEMPERATURE  = 1.0
 MAX_PLY      = 50
-TICKS, S     = 64, 1
+TICKS, S     = 16, 1
 
 # Build full UCI move vocab
 def build_move_vocab():
@@ -214,4 +214,5 @@ def train_fn(index, flags=None):
     print(f"[core {index}] Training complete.")
 
 if __name__=='__main__':
-    xmp.spawn(train_fn, args=(), nprocs=4)
+    # Spawn 8 TPU processes
+    xmp.spawn(train_fn, args=(), nprocs=8)

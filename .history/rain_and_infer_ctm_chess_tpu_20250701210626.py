@@ -30,7 +30,7 @@ EVAL_EVERY   = 1000
 LR           = 1e-4
 TEMPERATURE  = 1.0
 MAX_PLY      = 50
-TICKS, S     = 64, 1
+TICKS, S     = 75, 1
 
 # Build full UCI move vocab
 def build_move_vocab():

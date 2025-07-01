@@ -100,6 +100,7 @@ def train_fn(index, flags=None):
     ).to(device)
     optimizer = torch.optim.AdamW(model.parameters(), lr=LR)
 
+    # всегда стартуем с итерации 1
     start_iter = 1
     model.train()
 
@@ -163,6 +164,7 @@ def train_fn(index, flags=None):
         loss.backward()
         xm.optimizer_step(optimizer)
 
+        # 4) Сохраняем чекпоинт
         if it % SAVE_EVERY == 0 or it == RL_ITERS:
             ck = {
                 "model_state_dict":     model.state_dict(),

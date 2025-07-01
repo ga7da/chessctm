@@ -5,6 +5,7 @@
 # always from scratch, без загрузки старых чекпоинтов.
 
 import os
+# настраиваем XLA на TPU (4 ядра) и отключаем баннер absl
 os.environ.setdefault("PJRT_DEVICE", "TPU")
 os.environ.setdefault("TPU_NUM_DEVICES", "4")
 os.environ.setdefault("ABSL_MIN_LOG_LEVEL", "1")
@@ -34,7 +35,7 @@ EVAL_EVERY  = 2500
 LR          = 1e-4
 TEMPERATURE = 1.0
 MAX_PLY     = 50
-TICKS, S    = 64, 1
+TICKS, S    = 64, 1  # число тактов (TICKS) и размер батча в предсказаниях (S)
 
 def build_move_vocab():
     files, ranks = "abcdefgh", "12345678"
@@ -79,6 +80,7 @@ def train_fn(index, flags=None):
     device = xm.xla_device()
     print(f"[core {index}] Using device: {device}", flush=True)
 
+    # создаём модель и оптимизатор
     model = ContinuousThoughtMachine(
         iterations=TICKS,
         d_model=512,
@@ -100,6 +102,7 @@ def train_fn(index, flags=None):
     ).to(device)
     optimizer = torch.optim.AdamW(model.parameters(), lr=LR)
 
+    # всегда стартуем с итерации 1
     start_iter = 1
     model.train()
 
@@ -163,6 +166,7 @@ def train_fn(index, flags=None):
         loss.backward()
         xm.optimizer_step(optimizer)
 
+        # 4) Сохраняем чекпоинт
         if it % SAVE_EVERY == 0 or it == RL_ITERS:
             ck = {
                 "model_state_dict":     model.state_dict(),
@@ -200,6 +204,7 @@ def train_fn(index, flags=None):
             print(f"[core {index}] Saved PGN → {pgn}", flush=True)
             model.train()
 
+        # 6) Отладочный принт раз в 10 iters
         if it % 10 == 0:
             print(f"[core {index}] iter {it}/{RL_ITERS} "
                   f"loss={loss:.3f} baseline={baseline:.3f}",
@@ -209,4 +214,5 @@ def train_fn(index, flags=None):
 
 
 if __name__ == "__main__":
+    # подъём одного процесса на каждое TPU-ядро (4)
     xmp.spawn(train_fn, args=(), nprocs=None)

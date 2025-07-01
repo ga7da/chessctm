@@ -163,6 +163,7 @@ def train_fn(index, flags=None):
         loss.backward()
         xm.optimizer_step(optimizer)
 
+        # 4) Сохраняем чекпоинт
         if it % SAVE_EVERY == 0 or it == RL_ITERS:
             ck = {
                 "model_state_dict":     model.state_dict(),

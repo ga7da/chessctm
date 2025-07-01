@@ -5,6 +5,7 @@
 # always from scratch, без загрузки старых чекпоинтов.
 
 import os
+# настраиваем XLA на TPU (4 ядра) и отключаем баннер absl
 os.environ.setdefault("PJRT_DEVICE", "TPU")
 os.environ.setdefault("TPU_NUM_DEVICES", "4")
 os.environ.setdefault("ABSL_MIN_LOG_LEVEL", "1")
@@ -79,6 +80,7 @@ def train_fn(index, flags=None):
     device = xm.xla_device()
     print(f"[core {index}] Using device: {device}", flush=True)
 
+    # создаём модель и оптимизатор
     model = ContinuousThoughtMachine(
         iterations=TICKS,
         d_model=512,
@@ -100,6 +102,7 @@ def train_fn(index, flags=None):
     ).to(device)
     optimizer = torch.optim.AdamW(model.parameters(), lr=LR)
 
+    # всегда стартуем с итерации 1
     start_iter = 1
     model.train()
 
@@ -163,6 +166,7 @@ def train_fn(index, flags=None):
         loss.backward()
         xm.optimizer_step(optimizer)
 
+        # 4) Сохраняем чекпоинт
         if it % SAVE_EVERY == 0 or it == RL_ITERS:
             ck = {
                 "model_state_dict":     model.state_dict(),

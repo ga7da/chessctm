@@ -1,4 +1,3 @@
-#!/usr/bin/env python3
 # train_and_infer_ctm_chess_tpu.py
 #
 # Self-Play RL fine-tuning of CTM Chess Engine on Google Cloud TPU (4 cores).
@@ -6,11 +5,9 @@
 #   pip install torch torchvision torch_xla python-chess tqdm
 
 import os
-# Force XLA onto TPU and limit to 4 cores
+# Force XLA to use TPU and limit to 4 cores
 os.environ.setdefault('PJRT_DEVICE', 'TPU')
 os.environ.setdefault('TPU_NUM_DEVICES', '4')
-# Optional: suppress the absl timezone banner
-os.environ.setdefault('ABSL_MIN_LOG_LEVEL', '1')
 
 import re
 import time
@@ -39,10 +36,10 @@ TEMPERATURE = 1.0
 MAX_PLY     = 50
 TICKS, S    = 64, 1
 
+# Build full UCI move vocab
 def build_move_vocab():
     files, ranks = 'abcdefgh', '12345678'
     m2i, i2m, idx = {}, {}, 0
-    # Plain moves
     for f1 in files:
         for r1 in ranks:
             for f2 in files:
@@ -50,7 +47,6 @@ def build_move_vocab():
                     u = f1 + r1 + f2 + r2
                     m2i[u], i2m[idx] = idx, u
                     idx += 1
-    # White promotions
     for f in files:
         for promo in ('q','r','b','n'):
             for df in (-1,0,1):
@@ -60,7 +56,6 @@ def build_move_vocab():
                     u = f + '7' + dest + '8' + promo
                     m2i[u], i2m[idx] = idx, u
                     idx += 1
-    # Black promotions
     for f in files:
         for promo in ('q','r','b','n'):
             for df in (-1,0,1):
@@ -75,6 +70,7 @@ def build_move_vocab():
 move2idx, idx2move = build_move_vocab()
 C = len(move2idx)
 
+# Encode chess.Board → tensor (12×8×8)
 def encode_board(board: chess.Board) -> torch.Tensor:
     M = torch.zeros(12, 8, 8, dtype=torch.float32)
     for sq, p in board.piece_map().items():
@@ -84,6 +80,7 @@ def encode_board(board: chess.Board) -> torch.Tensor:
         M[ch, r, f] = 1.0
     return M
 
+# Load latest checkpoint
 def get_latest_ckpt():
     files = [f for f in os.listdir('.') if
              re.match(r'ctm_rl_ckpt_(\d+)\.pt', f)]
@@ -94,13 +91,12 @@ def get_latest_ckpt():
 
 def train_fn(index, flags=None):
     device = xm.xla_device()
-    print(f"[core {index}] Using device: {device}", flush=True)
+    print(f"[core {index}] Using device: {device}")
 
-    # Initialize model & optimizer
     model = ContinuousThoughtMachine(
         iterations=TICKS,
         d_model=512,
-        d_input=12*8*8,
+        d_input=12 * 8 * 8,
         heads=8,
         n_synch_out=256,
         n_synch_action=256,
@@ -111,36 +107,28 @@ def train_fn(index, flags=None):
         do_layernorm_nlm=False,
         backbone_type='none',
         positional_embedding_type='none',
-        out_dims=S*C,
+        out_dims=S * C,
         prediction_reshaper=[S, C],
         dropout=0.1,
         neuron_select_type='random-pairing',
     ).to(device)
     optimizer = torch.optim.AdamW(model.parameters(), lr=LR)
 
-    # === Resume from checkpoint (load onto CPU then copy to TPU) ===
+    # Resume from checkpoint if exists
     ckpt = get_latest_ckpt()
     start_iter = 1
     if ckpt:
-        raw = None
-        if xm.get_ordinal() == 0:
-            print(f"[core {index}] Loading {ckpt} on CPU", flush=True)
-            raw = torch.load(ckpt, map_location='cpu')
-        data = xm.rendezvous(f"load_ckpt_{ckpt}", raw)
+        print(f"[core {index}] Loading {ckpt}")
+        data = torch.load(ckpt, map_location=device)
         model.load_state_dict(data['model_state_dict'], strict=False)
         if 'optimizer_state_dict' in data:
             optimizer.load_state_dict(data['optimizer_state_dict'])
-            # Move optimizer state tensors to the XLA device
-            for state in optimizer.state.values():
-                for k, v in state.items():
-                    if isinstance(v, torch.Tensor):
-                        state[k] = v.to(device)
-        start_iter = int(re.search(r'ctm_rl_ckpt_(\d+)\.pt', ckpt)
-                         .group(1)) + 1
-    # =============================================================
-
+        start_iter = (int(re.search(r'ctm_rl_ckpt_(\d+)\.pt', ckpt)
+                       .group(1)) + 1)
     model.train()
-    for it in range(start_iter, RL_ITERS+1):
+
+    for it in range(start_iter, RL_ITERS + 1):
+        # Self-play batch
         games = []
         for _ in range(BATCH_SIZE):
             board = chess.Board()
@@ -151,11 +139,14 @@ def train_fn(index, flags=None):
             while (not board.is_game_over(claim_draw=True)
                    and len(traj) < MAX_PLY):
                 if board.is_insufficient_material():
-                    res = '1/2-1/2'; break
+                    res = '1/2-1/2'
+                    break
                 fen = board.fen()
                 pos_counts[fen] += 1
                 if pos_counts[fen] >= 3:
-                    repeat_penalty = True; res = '1/2-1/2'; break
+                    repeat_penalty = True
+                    res = '1/2-1/2'
+                    break
 
                 X = encode_board(board).unsqueeze(0).to(device)
                 logits_raw, cert, _ = model(X)
@@ -180,17 +171,22 @@ def train_fn(index, flags=None):
             if repeat_penalty:
                 Rw, Rb = -0.5, -0.5
             else:
-                if res == '1-0': Rw, Rb = +1, -1
-                elif res == '0-1': Rw, Rb = -1, +1
-                else:           Rw, Rb = 0, 0
+                if res == '1-0':
+                    Rw, Rb = +1, -1
+                elif res == '0-1':
+                    Rw, Rb = -1, +1
+                else:
+                    Rw, Rb = 0, 0
 
-            games.append([(lp, Rw if pl else Rb) for lp, pl in traj])
+            games.append([(lp, Rw if pl else Rb)
+                          for lp, pl in traj])
 
         # Compute REINFORCE loss
         logps, returns = [], []
         for g in games:
             for lp, r in g:
-                logps.append(lp); returns.append(r)
+                logps.append(lp)
+                returns.append(r)
         R = torch.tensor(returns, device=device)
         baseline = R.mean().detach()
         loss = sum(-lp * (r - baseline)
@@ -201,7 +197,6 @@ def train_fn(index, flags=None):
         loss.backward()
         xm.optimizer_step(optimizer)
 
-        # Checkpointing
         if it % SAVE_EVERY == 0 or it == RL_ITERS:
             ck = {
                 'model_state_dict': model.state_dict(),
@@ -209,9 +204,8 @@ def train_fn(index, flags=None):
             }
             fname = f'ctm_rl_ckpt_{it}.pt'
             torch.save(ck, fname)
-            print(f"[core {index}] Saved checkpoint {fname}", flush=True)
+            print(f"[core {index}] Saved checkpoint {fname}")
 
-        # Evaluation
         if it % EVAL_EVERY == 0 or it == 1:
             model.eval()
             b = chess.Board()
@@ -236,16 +230,15 @@ def train_fn(index, flags=None):
             pgn = f'ctm_game_{it}.pgn'
             with open(pgn, 'w') as f:
                 f.write(str(game))
-            print(f"[core {index}] Saved PGN {pgn}", flush=True)
+            print(f"[core {index}] Saved PGN {pgn}")
             model.train()
 
         if it % 10 == 0:
             print(f"[core {index}] iter {it}/{RL_ITERS} "
-                  f"loss={loss:.3f} baseline={baseline:.3f}",
-                  flush=True)
+                  f"loss={loss:.3f} baseline={baseline:.3f}")
 
-    print(f"[core {index}] Training complete.", flush=True)
+    print(f"[core {index}] Training complete.")
 
 if __name__ == '__main__':
-    # Spawn one process per TPU core (4 cores)
+    # Spawn one process per TPU core (4 in this setup)
     xmp.spawn(train_fn, args=(), nprocs=None)

@@ -1,0 +1,17 @@
+numpy
+torch
+torchvision
+matplotlib
+seaborn
+tqdm
+opencv-python
+imageio
+scikit-learn
+umap-learn
+python-dotenv
+gymnasium
+minigrid
+datasets
+autoclip
+python-chess
+tqdm
